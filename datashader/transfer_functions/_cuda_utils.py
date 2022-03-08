@@ -111,61 +111,12 @@ def masked_clip_2d_kernel(data, mask, lower, upper):
         cuda_atomic_nanmin(data, (i, j), upper)
 
 
-# interp
-# ------
-# When cupy adds cupy.interp support, this function can be removed
 def interp(x, xp, fp, left=None, right=None):
     """
-    cupy implementation of np.interp.  This function can be removed when an
-    official cupy.interp function is added to the cupy library.
+    Small wrapper around `cupy.interp` to convert
+    `np.array` to `cupy.array`.
     """
-    output_y = cupy.zeros(x.shape, dtype=cupy.float64)
-    assert len(x.shape) == 2
-    if left is None:
-        left = fp[0]
-    left = float(left)
-    if right is None:
-        right = fp[-1]
-    right = float(right)
-    interp2d_kernel[cuda_args(x.shape)](
-        x.astype(cupy.float64), xp.astype(cupy.float64), fp.astype(cupy.float64), left, right, output_y
-    )
-    return output_y
-
-
-@cuda.jit
-def interp2d_kernel(x, xp, fp, left, right, output_y):
-    i, j = cuda.grid(2)
-    if i < x.shape[0] and j < x.shape[1]:
-        xval = x[i, j]
-
-        if isnan(xval):
-            output_y[i, j] = nan
-        elif xval < xp[0]:
-            output_y[i, j] = left
-        elif xval >= xp[-1]:
-            output_y[i, j] = right
-        else:
-            # Find indices of xp that straddle xval
-            upper_i = len(xp) - 1
-            lower_i = 0
-            while True:
-                stop_i = 1 + (lower_i + upper_i) // 2
-                if xp[stop_i] < xval:
-                    lower_i = stop_i
-                elif xp[stop_i - 1] > xval:
-                    upper_i = stop_i - 1
-                else:
-                    break
-
-            # Compute interpolate y value
-            x0 = xp[stop_i - 1]
-            x1 = xp[stop_i]
-            y0 = fp[stop_i - 1]
-            y1 = fp[stop_i]
-
-            slope = (y1 - y0) / (x1 - x0)
-            y_interp = y0 + slope * (xval - x0)
-
-            # Update output
-            output_y[i, j] = y_interp
+    x = cupy.array(x)
+    xp = cupy.array(xp)
+    fp = cupy.array(fp)
+    return cupy.interp(x, xp, fp, left, right)
